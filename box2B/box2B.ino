@@ -100,12 +100,14 @@ const String EOS_KEY = "/eos/key";
 const String EOS_NEXT_KEY = "NEXT";
 const String EOS_LAST_KEY = "LAST";
 
+const String NO_PARAMETER = "none"; // none is a keyword used when there is no parameter
+
 // variables
 bool updateDisplay = false;
 bool connectedToEos = false;
 uint32_t lastMessageRxTime = 0;
 bool timeoutPingSent = false;
-int8_t idx = 2; // start with parameter index 2 must even
+int8_t idx = 0; // start with parameter index 2 must even
 
 // constructors
 LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7); // rs, enable, d0, d1, d2, d3
@@ -117,9 +119,9 @@ struct Parameter {
 	float value;
 	};
 
-const uint8_t PARAMETER_MAX = 16; // number of parameters must even
+const uint8_t PARAMETER_MAX = 14; // number of parameters must even
 struct Parameter parameter[PARAMETER_MAX] = {
-	{"empty", "------"},
+	{"none", "------"},
 	{"Intens"},
 	{"Pan"},
 	{"Tilt"},
@@ -127,8 +129,8 @@ struct Parameter parameter[PARAMETER_MAX] = {
 	{"Edge"},
 	{"Iris"},
 	{"Diffusn"},
-	{"Hue"},
-	{"Saturatn"},
+	//{"Hue"},
+	//{"Saturatn"},
 	{"Red"},
 	{"Green"},
 	{"Blue"},
@@ -217,8 +219,17 @@ void issueSubscribes() {
 	unsubscribe.send(SLIPSerial);
 	SLIPSerial.endPacket();
 
-	// subscribes all parameters of your list, exept item 0
-	String subMsg = SUBSCRIBE_QUERY + parameter[idx].name + "/" + parameter[idx + 1].name;
+	// subscribes the displayed parameters, exept the parameter with keyword none
+	String subMsg;
+	if (parameter[idx].name == NO_PARAMETER) {
+		subMsg = SUBSCRIBE_QUERY + parameter[idx + 1].name;
+		}
+	else if (parameter[idx + 1].name == NO_PARAMETER) {
+		subMsg = SUBSCRIBE_QUERY + parameter[idx].name;
+		}
+	else {
+		subMsg = SUBSCRIBE_QUERY + parameter[idx].name + "/" + parameter[idx + 1].name;
+		}
 	OSCMessage subscribe(subMsg.c_str());
 	subscribe.add(SUBSCRIBE);
 	SLIPSerial.beginPacket();
@@ -260,7 +271,7 @@ void parseOSCMessage(String& msg) {
 		// checks if there is a message with data of your parameter list
 		OSCMessage oscmsg;
 		oscmsg.fill((uint8_t*)msg.c_str(), (int)msg.length());
-		for (int i = 1; i < PARAMETER_MAX; i++) {
+		for (int i = 0; i < PARAMETER_MAX; i++) {
 			String parseMsg = PARAMETER_QUERY + parameter[i].name;
 			if(msg.indexOf(parseMsg) != -1) {
 				parameter[i].value = oscmsg.getOSCData(0)->getFloat(); // get the value
@@ -349,7 +360,8 @@ void updateEncoder(struct Encoder* encoder) {
 		}
 	encoder->pinAPrevious = pinACurrent;
 	encoder->pinBPrevious = pinBCurrent;
-	if ((encoderMotion != 0) && (encoder->parameterIdx > 0)) {
+	if ((encoderMotion != 0) && (encoder->parameterIdx >= 0)) {
+		if (parameter[encoder->parameterIdx].name == NO_PARAMETER) return;
 		String wheelMsg("/eos/wheel");
 		if (parameter[encoder->parameterIdx].name == "Intens") {
 			if (digitalRead(SHIFT_BTN) == LOW) encoderMotion *= WHEEL_ACC;
@@ -476,22 +488,24 @@ void initEncoderButton(struct EncoderButton* button, uint8_t pin, uint8_t encode
  * @param button 
  */
 void updateEncoderButton(struct EncoderButton* button) {
-	if ((digitalRead(button->pin)) != button->last) {
-		String homePattern = "/eos/param/";
-		if (button->encoderNumber == 1) {
-			homePattern += parameter[idx].name;
-			homePattern += "/home/";
-			}
-		if (button->encoderNumber == 2) {
-			homePattern += parameter[idx + 1].name;
-			homePattern += "/home/";
-			}
-		OSCMessage homeUpdate(homePattern.c_str());
+	if ((digitalRead(button->pin)) != button->last) {		
 		if (button->last == LOW) {
 			button->last = HIGH;
-			SLIPSerial.beginPacket();
-			homeUpdate.send(SLIPSerial);
-			SLIPSerial.endPacket();
+			String homePattern = "/eos/param/";
+			if (button->encoderNumber == 1) {
+				if(parameter[idx].name == NO_PARAMETER) return;
+				homePattern += parameter[idx].name;
+				homePattern += "/home/";
+				}
+			if (button->encoderNumber == 2) {
+				if(parameter[idx + 1].name == NO_PARAMETER) return;
+				homePattern += parameter[idx + 1].name;
+				homePattern += "/home/";
+				}
+			OSCMessage homeUpdate(homePattern.c_str());
+				SLIPSerial.beginPacket();
+				homeUpdate.send(SLIPSerial);
+				SLIPSerial.endPacket();
 			}
 		else {
 			button->last = LOW;
@@ -529,7 +543,7 @@ void setup() {
 	initControlButton(&parameterDown, PARAM_DOWN_BTN, DOWN);
 
 	initKey(&nextKey, EOS_NEXT_KEY, NEXT_BTN);
-  	initKey(&lastKey, EOS_LAST_KEY, LAST_BTN);
+  initKey(&lastKey, EOS_LAST_KEY, LAST_BTN);
 
 	initEncoderButton(&encoderButton1, ENC_1_BTN, 1);
 	initEncoderButton(&encoderButton2, ENC_2_BTN, 2);
@@ -565,7 +579,7 @@ void loop() {
 	updateControlButton(&parameterUp);
 	updateControlButton(&parameterDown);
 	updateKey(&nextKey);
-  	updateKey(&lastKey);
+  updateKey(&lastKey);
 	updateEncoderButton(&encoderButton1);
 	updateEncoderButton(&encoderButton2);
 

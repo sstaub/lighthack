@@ -35,7 +35,6 @@
 	SLIPEncodedSerial SLIPSerial(Serial);
 #endif
 
-
 // constants and macros
 #define LCD_CHARS				16
 #define LCD_LINES				2
@@ -55,12 +54,14 @@
 #define ENC_2_A					A2
 #define ENC_2_B					A3
 
-
 #define SUBSCRIBE				1
 #define UNSUBSCRIBE			0
 
 #define UP							0
 #define DOWN						1
+
+#define EDGE_UP					0
+#define EDGE_DOWN				1
 
 // number of encoders you use
 #define ENCODERS				2
@@ -80,22 +81,29 @@
 
 #define SIG_DIGITS			2 // number of significant digits displayed
 
-#define PING_AFTER_IDLE_INTERVAL    2500
-#define TIMEOUT_AFTER_IDLE_INTERVAL 5000
+#define PING_AFTER_IDLE_INTERVAL		2500
+#define TIMEOUT_AFTER_IDLE_INTERVAL	5000
 
 const String VERSION = "#lighthack box2A";
 const String HANDSHAKE_QUERY = "ETCOSC?";
 const String HANDSHAKE_REPLY = "OK";
 const String PING_QUERY = "box2a_hello";
 const String SUBSCRIBE_QUERY = "/eos/subscribe/param/";
+const String UNSUBSCRIBE_QUERY = "/eos/subscribe/param/*";
 const String PARAMETER_QUERY = "/eos/out/param/";
+
+const String EOS_KEY = "/eos/key";
+const String EOS_NEXT_KEY = "NEXT";
+const String EOS_LAST_KEY = "LAST";
+
+const String NO_PARAMETER = "none"; // none is a keyword used when there is no parameter
 
 // variables
 bool updateDisplay = false;
 bool connectedToEos = false;
-unsigned long lastMessageRxTime = 0;
+uint32_t lastMessageRxTime = 0;
 bool timeoutPingSent = false;
-int8_t index = 2; // start with parameter index 2 must even
+int8_t idx = 0; // start with parameter index 2 must even
 
 // constructors
 LiquidCrystal lcd(LCD_RS, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7); // rs, enable, d0, d1, d2, d3
@@ -107,9 +115,9 @@ struct Parameter {
 	float value;
 	};
 
-const uint8_t PARAMETER_MAX = 16; // number of parameters must even
+const uint8_t PARAMETER_MAX = 14; // number of parameters must even
 struct Parameter parameter[PARAMETER_MAX] = {
-	{"empty", "------"},
+	{"none", "------"},
 	{"Intens"},
 	{"Pan"},
 	{"Tilt"},
@@ -117,8 +125,8 @@ struct Parameter parameter[PARAMETER_MAX] = {
 	{"Edge"},
 	{"Iris"},
 	{"Diffusn"},
-	{"Hue"},
-	{"Saturatn"},
+	//{"Hue"},
+	//{"Saturatn"},
 	{"Red"},
 	{"Green"},
 	{"Blue"},
@@ -144,13 +152,25 @@ struct Encoder {
 	uint8_t pinAPrevious;
 	uint8_t pinBPrevious;
 	uint8_t direction;
-	} Encoder1, Encoder2, Encoder3;
+	} encoder1, encoder2;
 
-struct Button {
+struct ControlButton {
 	uint8_t function;
 	uint8_t pin;
 	uint8_t last;
 	} parameterUp, parameterDown;
+
+struct EncoderButton {
+	uint8_t pin;
+	uint8_t last;
+	uint8_t encoderNumber;
+	} encoderButton1, encoderButton2;
+
+struct Key {
+  String keyName;
+  uint8_t pin;
+  uint8_t last;
+  } lastKey, nextKey;
 
 /**
  * @brief send a ping with a message to the console
@@ -166,28 +186,51 @@ void sendPing() {
 	}
 
 /**
- * @brief
- * Issues all our subscribes to Eos. When subscribed, Eos will keep us updated
- * with the latest values for a given parameter.
- *
+ * @brief 
+ * add a filter so we don't get spammed with unwanted OSC messages from Eos
+ * 
  */
-void issueSubscribes() {
-	// add a filter so we don't get spammed with unwanted OSC messages from Eos
+void issueFilters() {
 	OSCMessage filter("/eos/filter/add");
 	filter.add("/eos/out/param/*");
 	filter.add("/eos/out/ping");
 	SLIPSerial.beginPacket();
 	filter.send(SLIPSerial);
 	SLIPSerial.endPacket();
-	// subscribes all parameters of your list
-	for (int i = 1; i < PARAMETER_MAX + 1; i++) {
-		String subMsg = SUBSCRIBE_QUERY + parameter[i].name;
-		OSCMessage subscribe(subMsg.c_str());
-		subscribe.add(SUBSCRIBE);
-		SLIPSerial.beginPacket();
-		subscribe.send(SLIPSerial);
-		SLIPSerial.endPacket();
+	}
+
+
+/**
+ * @brief
+ * Issues all our subscribes to Eos. When subscribed, Eos will keep us updated
+ * with the latest values for a given parameter.
+ *
+ */
+void issueSubscribes() {
+	// unsubscribes all parameters
+	String unsubMsg = UNSUBSCRIBE_QUERY;
+	OSCMessage unsubscribe(unsubMsg.c_str());
+	unsubscribe.add(UNSUBSCRIBE);
+	SLIPSerial.beginPacket();
+	unsubscribe.send(SLIPSerial);
+	SLIPSerial.endPacket();
+
+	// subscribes the displayed parameters, exept the parameter with keyword none
+	String subMsg;
+	if (parameter[idx].name == NO_PARAMETER) {
+		subMsg = SUBSCRIBE_QUERY + parameter[idx + 1].name;
 		}
+	else if (parameter[idx + 1].name == NO_PARAMETER) {
+		subMsg = SUBSCRIBE_QUERY + parameter[idx].name;
+		}
+	else {
+		subMsg = SUBSCRIBE_QUERY + parameter[idx].name + "/" + parameter[idx + 1].name;
+		}
+	OSCMessage subscribe(subMsg.c_str());
+	subscribe.add(SUBSCRIBE);
+	SLIPSerial.beginPacket();
+	subscribe.send(SLIPSerial);
+	SLIPSerial.endPacket();
 	}
 
 /**
@@ -200,6 +243,7 @@ void initEOS() {
 	SLIPSerial.beginPacket();
 	SLIPSerial.write((const uint8_t*)HANDSHAKE_REPLY.c_str(), (size_t)HANDSHAKE_REPLY.length());
 	SLIPSerial.endPacket();
+	issueFilters();
 	issueSubscribes();
 	}
 
@@ -223,7 +267,7 @@ void parseOSCMessage(String& msg) {
 		// checks if there is a message with data of your parameter list
 		OSCMessage oscmsg;
 		oscmsg.fill((uint8_t*)msg.c_str(), (int)msg.length());
-		for (int i = 1; i < PARAMETER_MAX; i++) {
+		for (int i = 0; i < PARAMETER_MAX; i++) {
 			String parseMsg = PARAMETER_QUERY + parameter[i].name;
 			if(msg.indexOf(parseMsg) != -1) {
 				parameter[i].value = oscmsg.getOSCData(0)->getFloat(); // get the value
@@ -251,25 +295,25 @@ void displayStatus() {
 		// put the cursor at the begining of the first line
 		lcd.setCursor(0, 0);
 		// check if display name is empty, if thrue take the parameter name
-		if (parameter[Encoder1.parameterIdx].display.length() == 0) {
-			lcd.print(parameter[Encoder1.parameterIdx].name);
+		if (parameter[encoder1.parameterIdx].display.length() == 0) {
+			lcd.print(parameter[encoder1.parameterIdx].name);
 			}
 		else {
-			lcd.print(parameter[Encoder1.parameterIdx].display);
+			lcd.print(parameter[encoder1.parameterIdx].display);
 			}
 		lcd.setCursor(8, 0);
-		if (parameter[Encoder2.parameterIdx].display.length() == 0) {
-			lcd.print(parameter[Encoder2.parameterIdx].name);
+		if (parameter[encoder2.parameterIdx].display.length() == 0) {
+			lcd.print(parameter[encoder2.parameterIdx].name);
 			}
 		else {
-		lcd.print(parameter[Encoder2.parameterIdx].display);
+		lcd.print(parameter[encoder2.parameterIdx].display);
 			}
 
 		// put the cursor at the begining of the second line
 		lcd.setCursor(0, 1);
-		lcd.print(parameter[Encoder1.parameterIdx].value, SIG_DIGITS);
+		lcd.print(parameter[encoder1.parameterIdx].value, SIG_DIGITS);
 		lcd.setCursor(8, 1);
-		lcd.print(parameter[Encoder2.parameterIdx].value, SIG_DIGITS);
+		lcd.print(parameter[encoder2.parameterIdx].value, SIG_DIGITS);
 		}
 		updateDisplay = false;
 	}
@@ -312,9 +356,10 @@ void updateEncoder(struct Encoder* encoder) {
 		}
 	encoder->pinAPrevious = pinACurrent;
 	encoder->pinBPrevious = pinBCurrent;
-	if ((encoderMotion != 0) && (encoder->parameterIdx > 0)) {
+	if ((encoderMotion != 0) && (encoder->parameterIdx >= 0)) {
+		if (parameter[encoder->parameterIdx].name == NO_PARAMETER) return;
 		String wheelMsg("/eos/wheel");
-		if (encoder->parameterIdx == 1) { // 1 = intensity
+		if (parameter[encoder->parameterIdx].name == "Intens") {
 			if (digitalRead(SHIFT_BTN) == LOW) encoderMotion *= WHEEL_ACC;
 			}
 		else if (encoder->parameterIdx > 1) {
@@ -330,13 +375,14 @@ void updateEncoder(struct Encoder* encoder) {
 		}
 	}
 
+
 /**
  * @brief initalizes a given button struct to the requested parameters
  *
  * @param button name of the button structure
  * @param pin arduino pin of the button
  */
-void initButton(struct Button* button, uint8_t pin, uint8_t function) {
+void initControlButton(struct ControlButton* button, uint8_t pin, uint8_t function) {
 	button->function = function;
 	button->pin = pin;
 	button->last = HIGH;
@@ -348,28 +394,30 @@ void initButton(struct Button* button, uint8_t pin, uint8_t function) {
  *
  * @param button
  */
-void updateButton(struct Button* button) {
+void updateControlButton(struct ControlButton* button) {
 	if ((digitalRead(button->pin)) != button->last) {
 		if (button->last == LOW) {
 			button->last = HIGH;
 			//calc index
 			if (button->function == UP) {
-				index += ENCODERS;
-				if (index > PARAMETER_MAX - ENCODERS) {
-					index = 0;
+				idx += ENCODERS;
+				if (idx > PARAMETER_MAX - ENCODERS) {
+					idx = 0;
 					} 
-				Encoder1.parameterIdx = index;
-				Encoder2.parameterIdx = index + 1;
+				encoder1.parameterIdx = idx;
+				encoder2.parameterIdx = idx + 1;
+				issueSubscribes();
 				displayStatus();
 				}
 			
 			if (button->function == DOWN) {
-				index -= ENCODERS;
-				if (index < 0) {
-					index = PARAMETER_MAX - ENCODERS;
+				idx -= ENCODERS;
+				if (idx < 0) {
+					idx = PARAMETER_MAX - ENCODERS;
 					} 
-				Encoder1.parameterIdx = index;
-				Encoder2.parameterIdx = index + 1;
+				encoder1.parameterIdx = idx;
+				encoder2.parameterIdx = idx + 1;
+				issueSubscribes();
 				displayStatus();
 				}      
 			}
@@ -380,33 +428,47 @@ void updateButton(struct Button* button) {
 	}
 
 /**
+ * @brief initalizes a given button struct to the requested parameters
+ *
+ * @param button name of the button structure
+ * @param pin arduino pin of the button
+ * @param key OSC name of the eos key
+ */
+void initEncoderButton(struct EncoderButton* button, uint8_t pin, uint8_t encoderNumber) {
+	button->encoderNumber = encoderNumber;
+	button->pin = pin;
+	button->last = HIGH;
+	pinMode(pin, INPUT_PULLUP);
+	}
+
+/**
  * @brief setup arduino
  *
  */
 void setup() {
-	SLIPSerial.begin(115200); // that is the right spped
-/*
+	SLIPSerial.begin(115200);
+
 	#ifdef BOARD_HAS_USB_SERIAL
 	 while (!SerialUSB);
 	 #else
 	 while (!Serial);
 	#endif
- */
+
 	lcd.begin(LCD_CHARS, LCD_LINES);
 	lcd.clear();
 
 	initEOS(); // for hotplug with Arduinos without native USB like UNO
 
 	// init of hardware elements
-	initEncoder(&Encoder1, A0, A1, ENC_1_DIR);
-	initEncoder(&Encoder2, A2, A3, ENC_2_DIR);
-	Encoder1.parameterIdx = index;
-	Encoder2.parameterIdx = index + 1;
+	initEncoder(&encoder1, A0, A1, ENC_1_DIR);
+	initEncoder(&encoder2, A2, A3, ENC_2_DIR);
+	encoder1.parameterIdx = idx;
+	encoder2.parameterIdx = idx + 1;
 
 	pinMode(SHIFT_BTN, INPUT_PULLUP);
 
-	initButton(&parameterUp, PARAM_UP_BTN, UP);
-	initButton(&parameterDown, PARAM_DOWN_BTN, DOWN);
+	initControlButton(&parameterUp, PARAM_UP_BTN, UP);
+	initControlButton(&parameterDown, PARAM_DOWN_BTN, DOWN);
 
 	displayStatus();
 	}
@@ -434,10 +496,10 @@ void loop() {
 		}
 
 	// check for next/last updates
-	updateEncoder(&Encoder1);
-	updateEncoder(&Encoder2);
-	updateButton(&parameterUp);
-	updateButton(&parameterDown);
+	updateEncoder(&encoder1);
+	updateEncoder(&encoder2);
+	updateControlButton(&parameterUp);
+	updateControlButton(&parameterDown);
 
 	if(lastMessageRxTime > 0) {
 		unsigned long diff = millis() - lastMessageRxTime;
