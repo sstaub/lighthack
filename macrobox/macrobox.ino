@@ -58,7 +58,7 @@
 
 const String HANDSHAKE_QUERY = "ETCOSC?";
 const String HANDSHAKE_REPLY = "OK";
-const String PING_QUERY = "box_macro_hello";
+const String PING_QUERY = "macrobox_hello";
 const String PING_REPLAY = "/eos/out/ping";
 
 // Change these values to alter how long we wait before sending an OSC ping
@@ -80,7 +80,7 @@ struct macroButton {
 	uint8_t pin;
 	uint8_t last;
 	String firePattern;
-	} button1, button2 ,button3 ,button4 ,button5 ,button6 ,button7 ,button8,button9,button10, button11 ,button12; 
+	} button1, button2, button3, button4, button5, button6, button7, button8, button9, button10, button11, button12; 
 
 /**
  * @brief send a ping with a message to the console
