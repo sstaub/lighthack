@@ -25,6 +25,13 @@ is a small faderwing with 6 faders and 12 buttons for Stop / Go
 ## macrobox
 is a box with 12 buttons to fire Macros, actual 101 thru 112 but this can easily changed.
 
+# What’s next
+There are some things to do because of heap fragmentation using many parameters on microcontrollers with less RAM. This is caused of dynamic memory allocation with malloc/new and free/delete in the Arduino String library and the OSC library from CNMAT.
+- eleminating Arduino String library calls using the classic C string.h 
+- replace the OSC library with a simplifed one<br>
+
+And for future a dedicated library for EOS.
+
 
 
 
