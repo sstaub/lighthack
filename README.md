@@ -5,7 +5,7 @@ You find further informations also in the ETC forum https://community.etcconnect
 All projects uses an Arduino **Arduino UNO**, but also an **Arduino MEGA** gives you connection to your console. On nomad you can use other boards, but you have to figure out which works.
 
 ## box2A
-is a modifcation of the original box1 and uses the Next and Last buttons to step thru a parameter list.<br>
+is a modifcation of the original box1 and uses the former Next and Last buttons to step thru a parameter list.<br>
 Because of the limited RAM of the Arduino UNO, the parameter list
 is limited and depends on the size of the parameter names.<br>
 On an Arduino UNO the is maximum of 14 parameter names.<br>
@@ -16,7 +16,7 @@ work with a console, have a look to the forum.<br>
 Added a keyword „none“ for gaps in the parameter list, former titeled as „empty“.
 
 ## box2B
-extends the box2A with extra buttons for Parameter Next / Last<br>
+extends the box2A with extra buttons for Next / Last keys<br>
 It uses the buttons of the encoder for posting the Home position
 
 ## faderwing
