@@ -8,7 +8,7 @@ All projects uses an Arduino **Arduino UNO**, but also an **Arduino MEGA** gives
 is a modifcation of the original box1 and uses the Next and Last buttons to step thru a parameter list.<br>
 Because of the limited RAM of the Arduino UNO, the parameter list
 is limited and depends on the size of the parameter names.<br>
-On an Arduino UNO the is maximum of 16 parameter names.<br>
+On an Arduino UNO the is maximum of 14 parameter names.<br>
 On an Arduino MEGA more than 14 parameters can be used, also
 on other boards like Teensy 3.x or 4<br>
 For Teensy you need to fake the PID/VID of the USB connection to
