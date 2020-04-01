@@ -355,19 +355,6 @@ void sendKeyPress(bool down, String key) {
 	SLIPSerial.endPacket();
 	}
 
-/*******************************************************************************
- * Checks the status of all the buttons relevant to Eos (i.e. Next & Last)
- *
- * NOTE: This does not check the shift key. The shift key is used in tandem with
- * the encoder to determine coarse/fine mode and thus does not report to Eos
- * directly.
- *
- * Parameters: none
- *
- * Return Value: void
- *
- ******************************************************************************/
-
 /**
  * @brief Checks the status of all the buttons relevant to Eos (i.e. Next & Last)
  *
