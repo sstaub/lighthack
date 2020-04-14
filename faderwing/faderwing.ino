@@ -1,5 +1,5 @@
 // Copyright (c) 2017 Electronic Theatre Controls, Inc., http://www.etcconnect.com
-// Copyright (c) 2020 Stefan Staub
+// Copyright (c) 2019 Stefan Staub
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -72,7 +72,8 @@ put 100nF ceramic capitors between ground and the input of the buttons
 #define TIMEOUT_AFTER_IDLE_INTERVAL	5000
 
 #define FADER_BANK				1
-#define NUMBER_OF_FADERS	6
+#define FADER_PAGE				1 // fader page on EOS / Nomad
+#define NUMBER_OF_FADERS	10 // size of the faders per page on EOS / NOmad
 
 #define FADER_UPDATE_RATE_MS	40 // update each 40ms
 
@@ -136,12 +137,15 @@ void issueFilters() {
  * @brief initialize a fader bank
  * 
  * @param bank number of the fader bank
+ * @param page number of the fader page
  * @param faders number of faders in this bank
  */
-void initFaders(uint8_t bank, uint8_t faders) {
+void initFaders(uint8_t bank, uint8_t page, uint8_t faders) {
 	String faderInit = "/eos/fader/";
 	faderInit += bank;
 	faderInit += "/config/";
+	faderInit += page;
+	faderInit += '/';
 	faderInit += faders;
 	OSCMessage faderBank(faderInit.c_str());
 	SLIPSerial.beginPacket();
@@ -165,7 +169,7 @@ void initEOS() {
 	issueFilters();
 
 	// activate a fader bank
-	initFaders(FADER_BANK, NUMBER_OF_FADERS);
+	initFaders(FADER_BANK, FADER_PAGE, NUMBER_OF_FADERS);
 	}
 
 /**
