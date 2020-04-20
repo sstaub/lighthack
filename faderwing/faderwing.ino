@@ -22,8 +22,12 @@
 /*
 fader is a linear 10kOhm, from Bourns or ALPS and can be 45/60/100mm long
 put 10nF ceramic capitors between ground and fader levelers to prevent analog noise
-+5V to the top (single pin) of the fader (100%)
+Arduino UNO, MEGA:
+use IOREF +5V to the top (single pin) of the fader (100%)
 GND to the center button pin (2 pins, the outer pin is normaly for the leveler) of the fader (0%)
+TEENSY:
++3.3V to the top (single pin) of the fader (100%)
+use ANALOG GND instead the normal GND to the center button pin (2 pins, the outer pin is normaly for the leveler) of the fader (0%)
 
 put 100nF ceramic capitors between ground and the input of the buttons
 */
